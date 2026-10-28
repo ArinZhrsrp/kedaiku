@@ -1,5 +1,5 @@
 const MISSIONS = [
-  {id:'1-1',title:'Buka Kedai',goals:[['ordered',5,'Order 5 unit'],['stocked',5,'Letak 5 unit di rak']]},
+  {id:'1-1',title:'Buka Kedai',goals:[['ordered',5,'Beli 5 unit stok'],['stocked',5,'Susun 5 unit di rak']]},
   {id:'1-2',title:'Pelanggan Pertama',goals:[['served',3,'Checkout 3 pelanggan']]},
   {id:'1-3',title:'Rak Sentiasa Penuh',goals:[['served',8,'Checkout 8 pelanggan'],['stocked',3,'Restock 3 unit']]},
   {id:'2-1',title:'Rak Ketiga',goals:[['thirdShelf',1,'Beli dan pasang rak ketiga']]},
