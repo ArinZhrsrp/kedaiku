@@ -1,0 +1,17 @@
+import { build } from 'esbuild';
+import { readFileSync, writeFileSync } from 'node:fs';
+const result = await build({ entryPoints: ['scene3d.js'], bundle: true, minify: true, format: 'iife', platform: 'browser', write: false, target: 'es2020' });
+const script = result.outputFiles[0].text;
+const html = readFileSync('index.html', 'utf8');
+const start = '<!-- 3D_ENGINE_START -->';
+const end = '<!-- 3D_ENGINE_END -->';
+const a = html.indexOf(start), b = html.indexOf(end);
+if (a < 0 || b < 0 || b <= a) throw new Error('3D engine markers missing from index.html');
+let output = html.slice(0, a + start.length) + '\n<script>' + script + '</script>\n' + html.slice(b);
+const appStart = '<!-- GAME_APP_START -->', appEnd = '<!-- GAME_APP_END -->';
+const c = output.indexOf(appStart), d = output.indexOf(appEnd);
+if (c < 0 || d < c) throw new Error('App markers missing from index.html');
+const app = readFileSync('missions.js', 'utf8') + '\n' + readFileSync('app.js', 'utf8');
+output = output.slice(0, c + appStart.length) + '\n<script>' + app + '</script>\n' + output.slice(d);
+writeFileSync('index.html', output);
+console.log(`Embedded 3D engine (${script.length} bytes) and game app (${app.length} bytes) in index.html`);
