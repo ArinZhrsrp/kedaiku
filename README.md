@@ -1,6 +1,8 @@
 # KedaiKu
 
-Game simulasi mengurus kedai runcit. Player ialah owner yang bergerak dalam kedai untuk urus stok, jadi cashier, dan akhirnya siapkan penghantaran. Fokusnya kerja mengurus kedai, bukan kuiz meneka harga barang.
+Game simulasi mengurus kedai runcit. Player bermula sebagai pekerja part time atau full time di kedai runcit orang lain, mengumpul duit sehingga cukup untuk membeli bangunan, kemudian membuka dan membesarkan kedai runcit sendiri. Sebagai owner, player bergerak dalam kedai untuk urus stok, jadi cashier, dan akhirnya siapkan penghantaran. Fokusnya kerja mengurus kedai, bukan kuiz meneka harga barang.
+
+Arah perjalanan player (karier) ini masih dalam perancangan; lihat [Perjalanan player: dari pekerja ke owner](#perjalanan-player-dari-pekerja-ke-owner).
 
 Projek ini sudah **dimulakan semula daripada asas**. README ini membezakan apa yang sudah ada dalam kod dengan flow yang hendak dibina, supaya sesiapa yang sambung development tidak tersalah ikut implementasi lama.
 
@@ -45,6 +47,37 @@ Penghantaran supplier ini berbeza daripada penghantaran pesanan customer yang di
 - Owner memantau stok dan membuat pembelian semula dari rak.
 - Player boleh membeli rak/fridge yang sesuai untuk kategori produk tambahan.
 - Untuk pesanan delivery customer, owner mengutip produk dan memasukkannya ke dalam van sebelum masa tamat.
+
+## Perjalanan player: dari pekerja ke owner
+
+> **Status: perancangan sahaja.** Belum ada sebarang kod untuk feature ini. Bina selepas flow stok dan cashier asas stabil, kerana fasa pekerja dan fasa owner akan menggunakan semula sistem yang sama.
+
+Game tidak terus meletakkan player sebagai owner. Player melalui tiga fasa:
+
+### 1. Fasa pekerja
+
+- Pada permulaan game, player memilih untuk bekerja **part time** atau **full time** di kedai runcit milik orang lain (NPC owner).
+- Player membuat kerja harian kedai seperti jaga cashier, susun stok dan layan pelanggan, menggunakan kawalan yang sama seperti fasa owner.
+- Player menerima gaji mengikut jenis kerja. Cadangan awal: full time memberi gaji lebih tinggi tetapi syif lebih panjang; part time gaji lebih rendah tetapi syif lebih pendek. Nilai gaji, panjang syif dan kekerapan bayaran belum dimuktamadkan.
+- Duit gaji dikumpul sebagai simpanan untuk matlamat membeli bangunan sendiri.
+
+### 2. Capai target dan beli bangunan
+
+- Game memaparkan **target simpanan** dan kemajuan player ke arah target tersebut.
+- Apabila simpanan mencukupi, player boleh membeli bangunan untuk kedai sendiri. Harga bangunan, pilihan lokasi/saiz bangunan, dan sama ada perlu modal tambahan untuk stok awal belum ditentukan.
+- Selepas membeli bangunan, player berhenti kerja dan beralih ke fasa owner.
+
+### 3. Fasa owner: bina dan besarkan kedai sendiri
+
+- Player memulakan kedai runcit sendiri dengan modal yang tinggal dan menggunakan flow owner dalam README ini (order stok, cashier, delivery).
+- Player cuba menjadikan kedai berjaya dan terus membesarkan perniagaan. Idea untuk progression:
+  - Tambah rak, peti sejuk, freezer dan kategori produk baru.
+  - Upgrade atau besarkan bangunan.
+  - Upah pekerja sendiri.
+  - Buka cawangan kedai baru.
+- Ukuran "berjaya" (contoh: keuntungan, bilangan pelanggan, rating kedai) perlu ditentukan semasa implementasi.
+
+Perkara yang perlu diputuskan sebelum develop: perbezaan sebenar part time dan full time, sama ada player boleh tukar jenis kerja di tengah jalan, kos hidup atau perbelanjaan semasa fasa pekerja, dan sama ada save game diperlukan sebelum fasa ini dibina.
 
 Rujukan arah visual dan cara bermain ialah game supermarket isometrik seperti Marketland/Supermarketland. Buat perubahan secara bertahap, kekalkan kamera fixed dan kawalan klik + joystick. Jangan masukkan semula semua sistem versi lama serentak.
 
@@ -95,3 +128,6 @@ Kemudian semak dalam browser: karakter bermula di tengah, klik lantai berfungsi,
 Untuk sama-sama develop, kongsi repository Git dan beri akses melalui platform repository yang digunakan. Kawan boleh clone repository, jalankan arahan di atas dan sambung daripada fail sumber. Untuk tengok hasil sahaja, kongsi `index.html` yang sudah dibuild.
 
 Mengubah README ini tidak memberikan permission repository atau menerbitkan website secara automatik. Versi sekarang berjalan dalam browser sahaja dan belum mempunyai backend, akaun pengguna atau multiplayer.
+
+
+
