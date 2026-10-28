@@ -4,15 +4,17 @@ function create(canvas){
  const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.shadowMap.enabled=true;
  const scene=new THREE.Scene();scene.background=new THREE.Color('#fff0db');
- const camera=new THREE.OrthographicCamera(-8,8,6,-6,.1,100);camera.position.set(13,14,18);camera.lookAt(4.5,0,3.5);
+ const shop={width:16,depth:12};
+ const center=new THREE.Vector3((shop.width-1)/2,0,(shop.depth-1)/2);
+ const camera=new THREE.OrthographicCamera(-12,12,9,-9,.1,100);camera.position.copy(center).add(new THREE.Vector3(8.5,14,14.5));camera.lookAt(center);
  scene.add(new THREE.HemisphereLight(0xfff7e6,0x9e8270,2.4));
  const sun=new THREE.DirectionalLight(0xffedcd,3);sun.position.set(-3,12,8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-15,right:15,top:15,bottom:-15});scene.add(sun);
  function box(name,x,y,z,w,h,d,color,r=.04){const obj=new THREE.Mesh(new RoundedBoxGeometry(w,h,d,2,r),new THREE.MeshStandardMaterial({color,roughness:.85}));obj.name=name;obj.position.set(x,y,z);obj.castShadow=obj.receiveShadow=true;scene.add(obj);}
- box('Floor base',4.5,-.2,3.5,10.2,.4,8.2,0xe5c7a0,.12);
- for(let x=0;x<10;x++)for(let z=0;z<8;z++)box('Floor tile',x,.02,z,.98,.04,.98,(x+z)%2?0xf3e7d2:0xfaf1df,.015);
- box('Back wall',4.5,1.2,-.5,10.2,2.4,.18,0xe6c3a2);
- box('Left wall',-.5,1.2,3.5,.18,2.4,8.2,0xefd3b5);
- box('Wall trim',4.5,2.42,-.5,10.3,.12,.25,0xcfa17f);
+ box('Floor base',center.x,-.2,center.z,shop.width+.2,.4,shop.depth+.2,0xe5c7a0,.12);
+ for(let x=0;x<shop.width;x++)for(let z=0;z<shop.depth;z++)box('Floor tile',x,.02,z,.98,.04,.98,(x+z)%2?0xf3e7d2:0xfaf1df,.015);
+ box('Back wall',center.x,1.2,-.5,shop.width+.2,2.4,.18,0xe6c3a2);
+ box('Left wall',-.5,1.2,center.z,.18,2.4,shop.depth+.2,0xefd3b5);
+ box('Wall trim',center.x,2.42,-.5,shop.width+.3,.12,.25,0xcfa17f);
  box('Cashier counter',7.1,.5,5.9,2.6,1,1.1,0xd89e79,.1);
  box('Counter top',7.1,1.04,5.9,2.75,.12,1.2,0xfff2d9);
  box('Cashier screen',6.7,1.33,5.82,.65,.43,.12,0x668f91);
@@ -24,21 +26,42 @@ function create(canvas){
  box('Glass door',-.25,1.03,6.1,.08,1.93,1.22,0x95cbd0);
  box('Door bottom',-.18,.3,6.1,.05,.5,1.22,0xc69a74);
  box('Door handle',-.12,1,6.56,.07,.3,.06,0xffe1a0);
- for(const z of [1.6,3.8]){
+ for(const z of [1.6,3.8,6.1,8.3]){
   box('Left window frame',-.35,1.4,z,.15,1.25,1.9,0xffefd5);
   box('Left window glass',-.24,1.4,z,.06,1.04,1.69,0xa6d8df);
   box('Left window mullion',-.18,1.4,z,.05,1.08,.07,0xffefd5);
   box('Left window sill',-.17,.76,z,.3,.1,2.02,0xffefd5);
  }
- for(const x of [1.6,4.3,7]){
+ for(const x of [1.6,4.3,7,9.7,12.4,14.5]){
   box('Window frame',x,1.4,-.35,1.9,1.25,.15,0xffefd5);
   box('Window glass',x,1.4,-.24,1.69,1.04,.06,0xa6d8df);
   box('Window mullion',x,1.4,-.18,.07,1.08,.05,0xffefd5);
   box('Window sill',x,.76,-.17,2.02,.1,.3,0xffefd5);
  }
- const obstacles=[[5.45,8.75,5,6.8]];
+ // Move the existing counter and entrance to the expanded front corners.
+ const counterNames=['Cashier counter','Counter top','Cashier screen','Screen display','Scanner'];
+ for(const obj of scene.children){
+  if(counterNames.includes(obj.name)){obj.position.x+=6;obj.position.z+=2.8;}
+  if(obj.name.startsWith('Door ')||obj.name==='Glass door')obj.position.z+=4;
+ }
+ // Keep a character-sized margin around the actual countertop footprint.
+ const cashierSpot={x:13.1,z:9.7};
+ const obstacles=[[11.475,14.725,7.85,9.55]];
+ const signCanvas=document.createElement('canvas');signCanvas.width=512;signCanvas.height=160;
+ const signContext=signCanvas.getContext('2d');
+ signContext.fillStyle='#fff1d5';signContext.fillRect(0,0,512,160);
+ signContext.strokeStyle='#b98156';signContext.lineWidth=12;signContext.strokeRect(6,6,500,148);
+ signContext.fillStyle='#634638';signContext.font='bold 72px sans-serif';signContext.textAlign='center';signContext.textBaseline='middle';signContext.fillText('CASHIER',256,84);
+ const signTexture=new THREE.CanvasTexture(signCanvas);signTexture.colorSpace=THREE.SRGBColorSpace;
+ const cashierSign=new THREE.Mesh(new THREE.BoxGeometry(1.25,.4,.06),[
+  new THREE.MeshStandardMaterial({color:0xb98156}),new THREE.MeshStandardMaterial({color:0xb98156}),
+  new THREE.MeshStandardMaterial({color:0xb98156}),new THREE.MeshStandardMaterial({color:0xb98156}),
+  new THREE.MeshBasicMaterial({map:signTexture}),new THREE.MeshBasicMaterial({map:signTexture})
+ ]);
+ cashierSign.name='Cashier sign';cashierSign.position.set(13.1,1.36,9.02);scene.add(cashierSign);
+ box('Sign stand',13.1,1.13,9.02,.65,.06,.25,0xb98156);
  function sphere(parent,x,y,z,r,color,sx=1,sy=1,sz=1){const m=new THREE.Mesh(new THREE.SphereGeometry(r,20,16),new THREE.MeshStandardMaterial({color,roughness:.85}));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;parent.add(m);return m;}
- for(const [x,z] of [[.2,.3],[8.65,.35],[8.7,6.8]]){
+ for(const [x,z] of [[.2,.3],[14.65,.35],[15,8.65]]){
   box('Plant pot',x,.24,z,.48,.48,.48,0xcc9274,.08);
   box('Plant trunk',x,.66,z,.09,.65,.09,0x9b7752);
   sphere(scene,x,.98,z,.38,0x6fa978,1,1.3,1);
@@ -46,7 +69,7 @@ function create(canvas){
   sphere(scene,x+.24,.89,z-.04,.26,0x91bf83);
   obstacles.push([x-.5,x+.5,z-.5,z+.5]);
  }
- const hero=new THREE.Group();hero.position.set(4.5,.06,3.5);scene.add(hero);
+ const hero=new THREE.Group();hero.position.set(center.x,.06,center.z);scene.add(hero);
  function part(x,y,z,w,h,d,color,parent=hero){const m=new THREE.Mesh(new RoundedBoxGeometry(w,h,d,3,.06),new THREE.MeshStandardMaterial({color,roughness:.8}));m.position.set(x,y,z);m.castShadow=true;parent.add(m);return m;}
  part(0,.69,0,.48,.57,.31,0xe69754);
  part(0,.66,.175,.33,.4,.04,0x6c9b8c);
@@ -58,10 +81,10 @@ function create(canvas){
  const legs=[part(-.14,.25,0,.19,.4,.23,0x4f6876),part(.14,.25,0,.19,.4,.23,0x4f6876)];
  const arms=[part(-.34,.7,0,.15,.43,.19,0xf2c7a3),part(.34,.7,0,.15,.43,.19,0xf2c7a3)];
  const targetRing=new THREE.Mesh(new THREE.RingGeometry(.17,.22,32),new THREE.MeshBasicMaterial({color:0x70a591,side:THREE.DoubleSide}));targetRing.rotation.x=-Math.PI/2;targetRing.position.y=.065;targetRing.visible=false;scene.add(targetRing);
- const canStand=(x,z)=>x>=-.12&&x<=9.12&&z>=-.12&&z<=7.12&&!obstacles.some(([a,b,c,d])=>x>a&&x<b&&z>c&&z<d);
+ const canStand=(x,z)=>x>=-.12&&x<=shop.width-.88&&z>=-.12&&z<=shop.depth-.88&&!obstacles.some(([a,b,c,d])=>x>a&&x<b&&z>c&&z<d);
  let path=[],stick={x:0,y:0},cashierArrival=false;
  function walkTo(x,z){
-  const step=.2,n=47,key=(x,z)=>z*n+x,grid=v=>Math.max(0,Math.min(46,Math.round(v/step)));
+  const step=.2,n=Math.ceil(shop.width/step),key=(x,z)=>z*n+x,grid=v=>Math.max(0,Math.min(n-1,Math.round(v/step)));
   if(!canStand(x,z))return;
   cashierArrival=false;
   const start=key(grid(hero.position.x),grid(hero.position.z)),goal=key(grid(x),grid(z)),queue=[start],prev=new Map([[start,null]]);
@@ -70,16 +93,26 @@ function create(canvas){
   path=[];for(let at=goal;at!==start;at=prev.get(at))path.push({x:(at%n)*step,z:Math.floor(at/n)*step});path.reverse();path.push({x,z});targetRing.position.set(x,.065,z);targetRing.visible=true;
  }
  const ray=new THREE.Raycaster(),floor=new THREE.Plane(new THREE.Vector3(0,1,0),-.06);
- const counterParts=scene.children.filter(obj=>['Cashier counter','Counter top','Cashier screen','Screen display','Scanner'].includes(obj.name));
- function click(clientX,clientY){const rect=canvas.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((clientX-rect.left)/rect.width*2-1,-(clientY-rect.top)/rect.height*2+1),camera);if(ray.intersectObjects(counterParts).length){walkTo(7.1,4.65);cashierArrival=true;return;}const p=ray.ray.intersectPlane(floor,new THREE.Vector3());if(p)walkTo(p.x,p.z);}
+ const counterParts=scene.children.filter(obj=>[...counterNames,'Cashier sign','Sign stand'].includes(obj.name));
+ function click(clientX,clientY){const rect=canvas.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((clientX-rect.left)/rect.width*2-1,-(clientY-rect.top)/rect.height*2+1),camera);if(ray.intersectObjects(counterParts).length){walkTo(cashierSpot.x,cashierSpot.z);cashierArrival=true;return;}const p=ray.ray.intersectPlane(floor,new THREE.Vector3());if(p)walkTo(p.x,p.z);}
  function setStick(x,y){stick={x,y};if(x||y){path=[];cashierArrival=false;targetRing.visible=false;}}
  let last=0,gait=0;
- function frame(time){const dt=Math.min((time-last)/1000||0,.04);last=time;let dx=0,dz=0;const manual=Math.hypot(stick.x,stick.y);if(manual>.08){const right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0);const forward=new THREE.Vector3().subVectors(camera.position,new THREE.Vector3(4.5,0,3.5));forward.y=0;forward.normalize();dx=right.x*stick.x+forward.x*stick.y;dz=right.z*stick.x+forward.z*stick.y;}else if(path.length){const p=path[0],dist=Math.hypot(p.x-hero.position.x,p.z-hero.position.z);if(dist<.04)path.shift();else{const speed=Math.min(1,dist/(dt*2.5||1));dx=(p.x-hero.position.x)/dist*speed;dz=(p.z-hero.position.z)/dist*speed;}}
+ function frame(time){const dt=Math.min((time-last)/1000||0,.04);last=time;let dx=0,dz=0;const manual=Math.hypot(stick.x,stick.y);if(manual>.08){const right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0);const forward=camera.getWorldDirection(new THREE.Vector3()).negate();forward.y=0;forward.normalize();dx=right.x*stick.x+forward.x*stick.y;dz=right.z*stick.x+forward.z*stick.y;}else if(path.length){const p=path[0],dist=Math.hypot(p.x-hero.position.x,p.z-hero.position.z);if(dist<.04)path.shift();else{const speed=Math.min(1,dist/(dt*2.5||1));dx=(p.x-hero.position.x)/dist*speed;dz=(p.z-hero.position.z)/dist*speed;}}
   const before=hero.position.clone(),x=hero.position.x+dx*dt*2.5,z=hero.position.z+dz*dt*2.5;if(canStand(x,hero.position.z))hero.position.x=x;if(canStand(hero.position.x,z))hero.position.z=z;const moved=hero.position.distanceTo(before);if(moved>.0001){hero.rotation.y=Math.atan2(dx,dz);gait+=moved*12;}hero.position.y=.06+(moved>.0001?Math.abs(Math.sin(gait))*.035:0);legs.forEach((p,i)=>p.rotation.x=moved>.0001?Math.sin(gait+i*Math.PI)*.45:0);arms.forEach((p,i)=>p.rotation.x=moved>.0001?-Math.sin(gait+i*Math.PI)*.4:0);if(!path.length)targetRing.visible=false;renderer.render(scene,camera);requestAnimationFrame(frame);
  }
- function alignAtCashier(){if(cashierArrival&&!path.length){hero.rotation.y=0;cashierArrival=false;}requestAnimationFrame(alignAtCashier);}
+ function alignAtCashier(){if(cashierArrival&&!path.length){hero.rotation.y=Math.PI;cashierArrival=false;}requestAnimationFrame(alignAtCashier);}
  requestAnimationFrame(alignAtCashier);
- function resize(){const w=canvas.clientWidth,h=canvas.clientHeight;renderer.setSize(w,h,false);const aspect=w/h,half=aspect<1?8:6;camera.left=-half*aspect;camera.right=half*aspect;camera.top=half;camera.bottom=-half;camera.updateProjectionMatrix();renderer.render(scene,camera);}
- new ResizeObserver(resize).observe(canvas);resize();requestAnimationFrame(frame);return{scene,renderer,click,setStick};
+ function resize(){const w=canvas.clientWidth,h=canvas.clientHeight;renderer.setSize(w,h,false);const aspect=w/h,half=Math.max(9,11/aspect);camera.left=-half*aspect;camera.right=half*aspect;camera.top=half;camera.bottom=-half;camera.updateProjectionMatrix();renderer.render(scene,camera);}
+ function zoomBy(factor){camera.zoom=THREE.MathUtils.clamp(camera.zoom*factor,.65,2.75);camera.updateProjectionMatrix();}
+ const panOffset=new THREE.Vector3();
+ function panBy(dx,dy){
+  const width=canvas.clientWidth,height=canvas.clientHeight;if(!width||!height)return;
+  const right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0);
+  const up=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,1);
+  const delta=right.multiplyScalar(-dx*(camera.right-camera.left)/(camera.zoom*width)).add(up.multiplyScalar(dy*(camera.top-camera.bottom)/(camera.zoom*height)));
+  const next=panOffset.clone().add(delta);next.clampLength(0,24);camera.position.add(next.clone().sub(panOffset));panOffset.copy(next);camera.updateMatrixWorld();
+ }
+ function resetZoom(){camera.position.sub(panOffset);panOffset.set(0,0,0);camera.zoom=1;camera.updateProjectionMatrix();camera.updateMatrixWorld();}
+ new ResizeObserver(resize).observe(canvas);resize();requestAnimationFrame(frame);return{scene,renderer,click,setStick,zoomBy,resetZoom,panBy};
 }
 window.Shop3D={create};
