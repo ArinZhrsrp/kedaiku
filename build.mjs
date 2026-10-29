@@ -11,7 +11,7 @@ let output = html.slice(0, a + start.length) + '\n<script>' + script + '</script
 const appStart = '<!-- GAME_APP_START -->', appEnd = '<!-- GAME_APP_END -->';
 const c = output.indexOf(appStart), d = output.indexOf(appEnd);
 if (c < 0 || d < c) throw new Error('App markers missing from index.html');
-const app = readFileSync('missions.js', 'utf8') + '\n' + readFileSync('app.js', 'utf8');
+const app = ['missions.js', 'music.js', 'app.js'].map(file => readFileSync(file, 'utf8')).join('\n');
 output = output.slice(0, c + appStart.length) + '\n<script>' + app + '</script>\n' + output.slice(d);
 writeFileSync('index.html', output);
 console.log(`Embedded 3D engine (${script.length} bytes) and game app (${app.length} bytes) in index.html`);

@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { createShelfStock } from './shelf-stock.js';
+import { createShelves3D } from './shelves3d.js';
+// Fixture images 01-27 hold these stock stations, in file-number order.
+const FIXTURE_STATIONS=['produce','herbs','drink','dairy','icecream','frozen','snack','confectionery','groceries','instant','rice','beverage','water','bakery','deli','meat','seafood','home','cleaning','care','beauty','health','baby','pet','lifestyle','promo','magazine'];
 function create(canvas){
  const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.shadowMap.enabled=true;
@@ -162,11 +166,21 @@ function create(canvas){
  utilityFixture('Magazine & Stationery',24.25,7.65,3);utilityFixture('Home & Lifestyle',24.2,9.7,4);utilityFixture('Promo Rack',24.15,11.65,5);
  utilityFixture('Backroom Storage',21.5,10.2,0);
  }
- const textureLoader=new THREE.TextureLoader();
+ const textureLoader=new THREE.TextureLoader(),shelfStocks=new Map(),stockRatios={},stationSprites=new Map();
  function hdFixture(file,name,x,z,width=2.25,height=2.15,footWidth=1.65,footDepth=.85){
   const material=new THREE.SpriteMaterial({transparent:true,alphaTest:.035,depthTest:true,depthWrite:false});
-  const sprite=new THREE.Sprite(material);sprite.name=name;sprite.center.set(.5,0);sprite.position.set(x,.06,z);sprite.scale.set(width,height,1);scene.add(sprite);
-  textureLoader.load(`./assets/equipment-hd/${file}?v=3`,texture=>{texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer.capabilities.getMaxAnisotropy();material.map=texture;material.needsUpdate=true;});
+  const sprite=new THREE.Sprite(material);sprite.name=name;if(FIXTURE_STATIONS[parseInt(file,10)-1])stationSprites.set(FIXTURE_STATIONS[parseInt(file,10)-1],sprite);sprite.center.set(.5,0);sprite.position.set(x,.06,z);sprite.scale.set(width,height,1);scene.add(sprite);
+  const useTexture=texture=>{texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer.capabilities.getMaxAnisotropy();material.map?.dispose();material.map=texture;material.needsUpdate=true;};
+  textureLoader.load(`./assets/equipment-hd/${file}?v=3`,texture=>{
+   useTexture(texture);
+   // Stock fixtures with an "empty shelf" image lose products one by one as stock drops.
+   const station=FIXTURE_STATIONS[parseInt(file,10)-1];if(!station)return;
+   const empty=new Image();empty.onload=()=>{
+    const shelf=createShelfStock(file,texture.image,empty);if(!shelf)return;
+    const canvasTexture=new THREE.CanvasTexture(shelf.canvas);shelfStocks.set(station,{shelf,texture:canvasTexture});
+    if(stockRatios[station]!==undefined)shelf.setLevel(stockRatios[station]);useTexture(canvasTexture);
+   };empty.src=`./assets/equipment-hd/empty/${file}?v=1`;
+  });
   obstacles.push([x-footWidth/2,x+footWidth/2,z-footDepth/2,z+footDepth/2]);return sprite;
  }
  // Layout follows the mega-supermarket reference: facilities at the back,
@@ -219,11 +233,48 @@ function create(canvas){
  zoneSign('CHILLED & FROZEN',10.5,2.65,1.45,'#27618d');zoneSign('FRESH PRODUCE',2.7,2.45,5.75,'#32814f');
  zoneSign('GROCERIES',10.5,2.5,5.45,'#76503c');zoneSign('BAKERY & DELI',19.8,2.45,5.4,'#9a592f');
  zoneSign('CARE & HOUSEHOLD',13.5,2.5,11.45,'#3b6577');
+ // Fixture centre and sprite height for every stock station, matching the hdFixture layout above.
  const stockPoints=[
-  {id:'snack',x:6,z:4.75,y:2.25},{id:'drink',x:9,z:7.75,y:2.25},{id:'essentials',x:12,z:4.75,y:2.25},
-  {id:'breakfast',x:15,z:4.75,y:2.25},{id:'home',x:15,z:7.75,y:2.25},{id:'care',x:9,z:10.75,y:2.25},
-  {id:'dairy',x:9.1,z:1.15,y:2.45},{id:'fresh',x:2.7,z:4.25,y:2.35},{id:'frozen',x:12,z:1.15,y:1.95}
- ];
+  ['produce',2.7,4.25,2.05],['herbs',2.7,7.05,2],['lifestyle',2.7,9.85,1.95],
+  ['drink',6.2,1.15,2.2],['dairy',9.1,1.15,2.2],['icecream',12,1.15,1.6],['frozen',14.8,1.15,1.6],
+  ['snack',6,4.75,2],['confectionery',9,4.75,2],['groceries',12,4.75,2],['instant',15,4.75,2],['bakery',18.2,4.75,1.95],['deli',21.4,4.75,1.85],
+  ['rice',6,7.75,2],['beverage',9,7.75,2],['water',12,7.75,2],['home',15,7.75,2],['meat',18.2,7.75,1.65],['seafood',21.4,7.75,1.65],
+  ['cleaning',6,10.75,2],['care',9,10.75,2],['beauty',12,10.75,2],['health',15,10.75,2],['baby',18,10.75,2],['pet',21,10.75,2],
+  ['magazine',7.5,13.65,1.9],['promo',11,13.65,1.85]
+ ].map(([id,x,z,h])=>({id,x,z,y:h+.3}));
+ // Optional 3D racks with real product meshes, switched on with setShelfMode('3d').
+ const shelves3d=createShelves3D(scene,stockPoints);
+ function setShelfMode(mode){const on=mode==='3d';shelves3d.setVisible(on);for(const sprite of stationSprites.values())sprite.visible=!on;}
+ // Floating badge above a fixture that only appears when its shelf is low or empty.
+ const stockBadges=new Map();
+ function drawBadge(badge,status,percent){
+  const {context:c,canvas}=badge,empty=status==='empty';
+  c.clearRect(0,0,canvas.width,canvas.height);
+  c.fillStyle=empty?'#d6453a':'#f0a12b';c.strokeStyle='#fff';c.lineWidth=10;
+  c.beginPath();c.roundRect(8,8,304,96,48);c.fill();c.stroke();
+  c.beginPath();c.moveTo(140,104);c.lineTo(160,124);c.lineTo(180,104);c.fill();
+  c.fillStyle='#fff';c.font='bold 52px system-ui,sans-serif';c.textAlign='center';c.textBaseline='middle';
+  c.fillText(empty?'✖ KOSONG':`⚠ ${percent}%`,160,58);
+  badge.texture.needsUpdate=true;
+ }
+ function setStockLevels(levels){
+  for(const point of stockPoints){
+   const level=levels[point.id];if(!level)continue;
+   stockRatios[point.id]=level.ratio;shelves3d.setLevel(point.id,level.ratio);const stock=shelfStocks.get(point.id);if(stock?.shelf.setLevel(level.ratio))stock.texture.needsUpdate=true;
+   const status=level.ratio<=0?'empty':level.ratio<=.3?'low':'ok',percent=Math.round(level.ratio*100);
+   let badge=stockBadges.get(point.id);
+   if(!badge){
+    const canvas=document.createElement('canvas');canvas.width=320;canvas.height=128;
+    const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
+    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,depthTest:false}));
+    sprite.center.set(.5,0);sprite.position.set(point.x,point.y,point.z+.2);sprite.scale.set(1.8,.72,1);sprite.renderOrder=40;sprite.visible=false;scene.add(sprite);
+    badge={sprite,canvas,texture,context:canvas.getContext('2d'),key:''};stockBadges.set(point.id,badge);
+   }
+   badge.status=status;badge.sprite.visible=status!=='ok';
+   const key=`${status}:${percent}`;if(status!=='ok'&&key!==badge.key){badge.key=key;drawBadge(badge,status,percent);}
+  }
+ }
+ function animateBadges(time){for(const [id,badge] of stockBadges){if(!badge.sprite.visible)continue;const point=stockPoints.find(item=>item.id===id),pulse=badge.status==='empty'?Math.sin(time/180)*.06:0;badge.sprite.position.y=point.y+Math.sin(time/400+point.x)*.05;badge.sprite.scale.set(1.8*(1+pulse),.72*(1+pulse),1);}}
  function sphere(parent,x,y,z,r,color,sx=1,sy=1,sz=1){const m=new THREE.Mesh(new THREE.SphereGeometry(r,20,16),new THREE.MeshStandardMaterial({color,roughness:.85}));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;parent.add(m);return m;}
  for(const [x,z] of [[.2,.3],[18.1,.35],[24.7,15.8]]){
   box('Plant pot',x,.24,z,.48,.48,.48,0xcc9274,.08);
@@ -246,11 +297,11 @@ function create(canvas){
  const arms=[part(-.34,.7,0,.15,.43,.19,0xf2c7a3),part(.34,.7,0,.15,.43,.19,0xf2c7a3)];
  const targetRing=new THREE.Mesh(new THREE.RingGeometry(.17,.22,32),new THREE.MeshBasicMaterial({color:0x70a591,side:THREE.DoubleSide}));targetRing.rotation.x=-Math.PI/2;targetRing.position.y=.065;targetRing.visible=false;scene.add(targetRing);
  const customerStations=[
-  {id:'produce',x:2.7,z:4.25},{id:'herbs',x:2.7,z:5.55},{id:'drink',x:6,z:2.05},{id:'dairy',x:9.1,z:2.05},{id:'icecream',x:12,z:2.05},{id:'frozen',x:15,z:2.05},
+  {id:'produce',x:3.9,z:4.25},{id:'herbs',x:3.9,z:7.05},{id:'drink',x:6,z:2.05},{id:'dairy',x:9.1,z:2.05},{id:'icecream',x:12,z:2.05},{id:'frozen',x:15,z:2.05},
   {id:'snack',x:6,z:5.55},{id:'confectionery',x:9,z:5.55},{id:'groceries',x:12,z:5.55},{id:'instant',x:15,z:5.55},{id:'bakery',x:18.2,z:5.55},{id:'deli',x:21.4,z:5.55},
   {id:'rice',x:6,z:8.55},{id:'beverage',x:9,z:8.55},{id:'water',x:12,z:8.55},{id:'home',x:15,z:8.55},{id:'meat',x:18.2,z:8.55},{id:'seafood',x:21.4,z:8.55},
   {id:'cleaning',x:6,z:11.55},{id:'care',x:9,z:11.55},{id:'beauty',x:12,z:11.55},{id:'health',x:15,z:11.55},{id:'baby',x:18,z:11.55},{id:'pet',x:21,z:11.55},
-  {id:'magazine',x:7.5,z:14.45},{id:'promo',x:11,z:14.45},{id:'lifestyle',x:3.8,z:4.25}
+  {id:'magazine',x:7.5,z:14.45},{id:'promo',x:11,z:14.45},{id:'lifestyle',x:3.9,z:9.85}
  ];
  const customers=[],dirtSpots=[];let storeOpen=false,spawnClock=0,nextCustomerId=1,cleaningTarget=null,cashierAutoClock=0;
  function makeEmoji(text,parent){const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;const context=canvas.getContext('2d');context.font='92px sans-serif';context.textAlign='center';context.textBaseline='middle';context.fillText(text,64,67);const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,depthTest:false}));sprite.position.set(0,1.75,0);sprite.scale.set(.8,.8,1);sprite.visible=false;sprite.renderOrder=30;parent.add(sprite);return sprite;}
@@ -258,21 +309,60 @@ function create(canvas){
   if(customers.length>=20)return;
   const group=new THREE.Group(),shirt=[0xe26f65,0x5b9ec9,0x72aa72,0xd69a55,0xa57ac0,0xe28ba6][nextCustomerId%6];scene.add(group);group.position.set(.75,.06,16.05);
   part(0,.68,0,.43,.55,.29,shirt,group);sphere(group,0,1.16,0,.26,[0xf2c7a3,0xc98f65,0x8e5d45][nextCustomerId%3]);sphere(group,0,1.34,-.02,.27,[0x4c352c,0x7a523c,0x2f2928][nextCustomerId%3],1,.62,1);
-  part(-.12,.25,0,.16,.4,.2,0x4f6876,group);part(.12,.25,0,.16,.4,.2,0x4f6876,group);part(-.3,.7,0,.13,.4,.17,0xf2c7a3,group);part(.3,.7,0,.13,.4,.17,0xf2c7a3,group);
+  const legs=[part(-.12,.25,0,.16,.4,.2,0x4f6876,group),part(.12,.25,0,.16,.4,.2,0x4f6876,group)],arms=[part(-.3,.7,0,.13,.4,.17,0xf2c7a3,group),part(.3,.7,0,.13,.4,.17,0xf2c7a3,group)];
+  // Picked items are stacked in the customer's hands on the way to the cashier.
+  const carry=new THREE.Group();carry.position.set(0,.5,.33);group.add(carry);
   const count=1+Math.floor(Math.random()*4),tasks=[];for(const station of [...customerStations].sort(()=>Math.random()-.5).slice(0,count))tasks.push(station);
-  const customer={id:nextCustomerId++,group,tasks,taskIndex:0,basket:[],state:'entering',awaiting:false,target:{x:3.8,z:15.2},emoji:makeEmoji('😡',group),emojiUntil:0};customers.push(customer);
+  const customer={id:nextCustomerId++,group,legs,arms,carry,gait:Math.random()*6,tasks,taskIndex:0,basket:[],state:'entering',awaiting:false,target:{x:3.8,z:15.2},emoji:makeEmoji('😡',group),emojiUntil:0,popup:null};customers.push(customer);
  }
- function removeCustomer(customer){scene.remove(customer.group);const index=customers.indexOf(customer);if(index>=0)customers.splice(index,1);if(!customers.length&&!storeOpen)window.dispatchEvent(new CustomEvent('kedaiku:store-empty'));}
- function showAngry(customer){customer.emoji.visible=true;customer.emojiUntil=performance.now()+2200;customer.state='leaving';customer.target={x:.55,z:16.05};window.dispatchEvent(new CustomEvent('kedaiku:customer-lost'));}
+ function disposeSprite(sprite){sprite.parent?.remove(sprite);sprite.material.map?.dispose();sprite.material.dispose();}
+ function showPopup(customer,text){if(customer.popup)disposeSprite(customer.popup.sprite);const sprite=makeEmoji(text,customer.group);sprite.scale.set(.55,.55,1);sprite.visible=true;customer.popup={sprite,born:performance.now()};}
+ function addCarriedItem(customer,color){
+  // A red supermarket basket appears with the first item; later items pile up inside it.
+  if(!customer.carry.children.length){
+   const red=new THREE.MeshStandardMaterial({color:0xd94a3a,roughness:.6});
+   const basket=new THREE.Mesh(new RoundedBoxGeometry(.5,.22,.32,2,.04),red);basket.castShadow=true;customer.carry.add(basket);
+   const handle=new THREE.Mesh(new THREE.TorusGeometry(.16,.018,6,20,Math.PI),red);handle.position.y=.1;customer.carry.add(handle);
+  }
+  const index=customer.carry.children.length-2;if(index>=6)return;
+  const item=new THREE.Mesh(new RoundedBoxGeometry(.15,.2,.13,2,.025),new THREE.MeshStandardMaterial({color:new THREE.Color(color||0xe6a45b),roughness:.7}));
+  item.position.set(-.15+(index%3)*.15,.18+Math.floor(index/3)*.1,index%2?.04:-.04);item.rotation.z=(index%3-1)*.15;item.castShadow=true;customer.carry.add(item);
+ }
+ function giveShoppingBag(customer){
+  customer.carry.clear();
+  const bag=new THREE.Group();bag.position.set(.36,.42,.05);customer.group.add(bag);customer.bag=bag;
+  const paper=new THREE.MeshStandardMaterial({color:0xf3e3c3,roughness:.9});
+  const body=new THREE.Mesh(new RoundedBoxGeometry(.26,.3,.16,2,.03),paper);body.castShadow=true;bag.add(body);
+  const handle=new THREE.Mesh(new THREE.TorusGeometry(.07,.012,6,16,Math.PI),new THREE.MeshStandardMaterial({color:0xb98156}));handle.position.y=.15;bag.add(handle);
+  const logo=new THREE.Mesh(new THREE.CircleGeometry(.05,16),new THREE.MeshBasicMaterial({color:0x2d9d62}));logo.position.z=.081;bag.add(logo);
+ }
+ // "+RM" text that rises and fades above the cashier after each payment.
+ const floaters=[];
+ function floatText(text,x,y,z,color='#1f8a52'){
+  const canvas=document.createElement('canvas');canvas.width=256;canvas.height=96;const c=canvas.getContext('2d');
+  c.font='900 64px system-ui,sans-serif';c.textAlign='center';c.textBaseline='middle';c.lineWidth=12;c.strokeStyle='#fff';c.strokeText(text,128,50);c.fillStyle=color;c.fillText(text,128,50);
+  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,depthTest:false}));sprite.position.set(x,y,z);sprite.scale.set(1.3,.49,1);sprite.renderOrder=50;scene.add(sprite);
+  floaters.push({sprite,born:performance.now(),y});
+ }
+ function updateFloaters(time){for(const f of [...floaters]){const age=(time-f.born)/1400;if(age>=1){disposeSprite(f.sprite);floaters.splice(floaters.indexOf(f),1);continue;}f.sprite.position.y=f.y+age*1.1;f.sprite.material.opacity=1-age*age;}}
+ function removeCustomer(customer){if(customer.popup)disposeSprite(customer.popup.sprite);disposeSprite(customer.emoji);scene.remove(customer.group);const index=customers.indexOf(customer);if(index>=0)customers.splice(index,1);if(!customers.length&&!storeOpen)window.dispatchEvent(new CustomEvent('kedaiku:store-empty'));}
+ function showAngry(customer){customer.carry.clear();customer.emoji.visible=true;customer.emojiUntil=performance.now()+2200;customer.state='leaving';customer.target={x:.55,z:16.05};window.dispatchEvent(new CustomEvent('kedaiku:customer-lost'));}
  function spawnDirt(x,z){if(dirtSpots.length>=8)return;const mesh=new THREE.Mesh(new THREE.CircleGeometry(.3,20),new THREE.MeshBasicMaterial({color:0x8b613d,transparent:true,opacity:.68,side:THREE.DoubleSide}));mesh.rotation.x=-Math.PI/2;mesh.position.set(x,.07,z);mesh.name='Dirt';scene.add(mesh);dirtSpots.push({mesh,x,z});window.dispatchEvent(new CustomEvent('kedaiku:dirt-changed',{detail:{count:dirtSpots.length}}));}
- function resolveCustomerRequest(id,success,itemInfo){const customer=customers.find(item=>item.id===id);if(!customer||!customer.awaiting)return;customer.awaiting=false;if(!success){showAngry(customer);return;}customer.basket.push(itemInfo||{name:'Barang',price:3});customer.taskIndex++;if(Math.random()<.18)spawnDirt(customer.group.position.x,customer.group.position.z);if(customer.taskIndex<customer.tasks.length){const station=customer.tasks[customer.taskIndex];customer.target={x:station.x,z:station.z};}else{customer.state='checkout';customer.target={x:21.7,z:15.55};}}
- function serveNextCustomer(){const customer=customers.find(item=>item.state==='waiting');if(!customer)return false;customer.state='leaving';customer.target={x:.55,z:16.05};const grouped=new Map;for(const item of customer.basket){const line=grouped.get(item.name)||{name:item.name,qty:0,price:item.price};line.qty++;grouped.set(item.name,line);}const lines=[...grouped.values()],total=lines.reduce((sum,item)=>sum+item.qty*item.price,0);window.dispatchEvent(new CustomEvent('kedaiku:customer-served',{detail:{items:customer.basket.length,lines,total}}));return true;}
+ function resolveCustomerRequest(id,success,itemInfo){const customer=customers.find(item=>item.id===id);if(!customer||!customer.awaiting)return;customer.awaiting=false;if(!success){showAngry(customer);return;}customer.basket.push(itemInfo||{name:'Barang',price:3});addCarriedItem(customer,itemInfo?.color);if(itemInfo?.icon)showPopup(customer,itemInfo.icon);customer.taskIndex++;if(Math.random()<.18)spawnDirt(customer.group.position.x,customer.group.position.z);if(customer.taskIndex<customer.tasks.length){const station=customer.tasks[customer.taskIndex];customer.target={x:station.x,z:station.z};}else{customer.state='checkout';customer.target={x:21.7,z:15.55};}}
+ function serveNextCustomer(){const customer=customers.find(item=>item.state==='waiting');if(!customer)return false;customer.state='leaving';customer.target={x:.55,z:16.05};const grouped=new Map;for(const item of customer.basket){const line=grouped.get(item.name)||{name:item.name,qty:0,price:item.price};line.qty++;grouped.set(item.name,line);}const lines=[...grouped.values()],total=lines.reduce((sum,item)=>sum+item.qty*item.price,0);giveShoppingBag(customer);showPopup(customer,'😊');floatText(`+RM${total}`,cashierSpot.x,1.9,cashierSpot.z+1.1);window.dispatchEvent(new CustomEvent('kedaiku:customer-served',{detail:{items:customer.basket.length,lines,total}}));return true;}
  function updateCustomers(dt,time){
   if(storeOpen){spawnClock-=dt;if(spawnClock<=0&&customers.length<20){createCustomer();spawnClock=1.25+Math.random()*1.25;}}
   const waiting=customers.filter(item=>item.state==='waiting');waiting.forEach((customer,index)=>{customer.target={x:21.7-Math.floor(index/6)*.55,z:15.5+index%6*.3};});
   for(const customer of [...customers]){
-   if(customer.emoji.visible&&time>customer.emojiUntil)customer.emoji.visible=false;if(customer.awaiting)continue;
-   const dx=customer.target.x-customer.group.position.x,dz=customer.target.z-customer.group.position.z,distance=Math.hypot(dx,dz);if(distance>.07){const speed=customer.state==='checkout'?2.8:.82+customer.id%4*.06,step=Math.min(distance,dt*speed);customer.group.position.x+=dx/distance*step;customer.group.position.z+=dz/distance*step;customer.group.rotation.y=Math.atan2(dx,dz);continue;}
+   if(customer.emoji.visible&&time>customer.emojiUntil)customer.emoji.visible=false;
+   if(customer.popup){const age=(time-customer.popup.born)/1100;if(age>=1){disposeSprite(customer.popup.sprite);customer.popup=null;}else{customer.popup.sprite.position.y=1.75+age*.45;customer.popup.sprite.material.opacity=1-age*age;}}
+   const carrying=customer.carry.children.length>0;
+   customer.arms.forEach((arm,i)=>{arm.rotation.x=carrying?-1.05:0;arm.position.z=carrying?.17:0;arm.position.y=carrying?.66:.7;});
+   if(customer.awaiting){customer.legs.forEach(leg=>leg.rotation.x=0);continue;}
+   const dx=customer.target.x-customer.group.position.x,dz=customer.target.z-customer.group.position.z,distance=Math.hypot(dx,dz);
+   if(distance>.07){const speed=customer.state==='checkout'?2.8:.82+customer.id%4*.06,step=Math.min(distance,dt*speed);customer.group.position.x+=dx/distance*step;customer.group.position.z+=dz/distance*step;customer.group.rotation.y=Math.atan2(dx,dz);customer.gait+=step*11;customer.legs.forEach((leg,i)=>leg.rotation.x=Math.sin(customer.gait+i*Math.PI)*.45);if(!carrying)customer.arms.forEach((arm,i)=>arm.rotation.x=-Math.sin(customer.gait+i*Math.PI)*.35);customer.group.position.y=.06+Math.abs(Math.sin(customer.gait))*.025;continue;}
+   customer.legs.forEach(leg=>leg.rotation.x=0);customer.group.position.y=.06;
    if(customer.state==='leaving'){removeCustomer(customer);continue;}if(customer.state==='checkout'){customer.state='waiting';continue;}
    if(customer.state==='entering'){const station=customer.tasks[customer.taskIndex];customer.state='shopping';customer.target={x:station.x,z:station.z};continue;}
    if(customer.state==='shopping'){customer.awaiting=true;window.dispatchEvent(new CustomEvent('kedaiku:customer-request',{detail:{customerId:customer.id,stationId:customer.tasks[customer.taskIndex].id}}));}
@@ -294,7 +384,7 @@ function create(canvas){
  function click(clientX,clientY){const rect=canvas.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((clientX-rect.left)/rect.width*2-1,-(clientY-rect.top)/rect.height*2+1),camera);const dirtHit=ray.intersectObjects(dirtSpots.map(item=>item.mesh))[0];if(dirtHit){const dirt=dirtSpots.find(item=>item.mesh===dirtHit.object);walkTo(dirt.x,dirt.z);cleaningTarget=dirt;return;}if(ray.intersectObjects(counterParts).length){walkTo(cashierSpot.x,cashierSpot.z);cashierArrival=true;return;}const p=ray.ray.intersectPlane(floor,new THREE.Vector3());if(p)walkTo(p.x,p.z);}
  function setStick(x,y){stick={x,y};if(x||y){path=[];cashierArrival=false;targetRing.visible=false;}}
  let last=0,gait=0;
- function frame(time){const dt=Math.min((time-last)/1000||0,.04);last=time;updateCustomers(dt,time);const atCashier=Math.hypot(hero.position.x-cashierSpot.x,hero.position.z-cashierSpot.z)<1.15;if(atCashier){cashierAutoClock-=dt;if(cashierAutoClock<=0&&customers.some(item=>item.state==='waiting')){serveNextCustomer();cashierAutoClock=1.15;}}else cashierAutoClock=0;let dx=0,dz=0;const manual=Math.hypot(stick.x,stick.y);if(manual>.08){const right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0);const forward=camera.getWorldDirection(new THREE.Vector3()).negate();forward.y=0;forward.normalize();dx=right.x*stick.x+forward.x*stick.y;dz=right.z*stick.x+forward.z*stick.y;}else if(path.length){const p=path[0],dist=Math.hypot(p.x-hero.position.x,p.z-hero.position.z);if(dist<.04)path.shift();else{const speed=Math.min(1,dist/(dt*2.5||1));dx=(p.x-hero.position.x)/dist*speed;dz=(p.z-hero.position.z)/dist*speed;}}
+ function frame(time){const dt=Math.min((time-last)/1000||0,.04);last=time;updateCustomers(dt,time);animateBadges(time);updateFloaters(time);const atCashier=Math.hypot(hero.position.x-cashierSpot.x,hero.position.z-cashierSpot.z)<1.15;if(atCashier){cashierAutoClock-=dt;if(cashierAutoClock<=0&&customers.some(item=>item.state==='waiting')){serveNextCustomer();cashierAutoClock=1.15;}}else cashierAutoClock=0;let dx=0,dz=0;const manual=Math.hypot(stick.x,stick.y);if(manual>.08){const right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0);const forward=camera.getWorldDirection(new THREE.Vector3()).negate();forward.y=0;forward.normalize();dx=right.x*stick.x+forward.x*stick.y;dz=right.z*stick.x+forward.z*stick.y;}else if(path.length){const p=path[0],dist=Math.hypot(p.x-hero.position.x,p.z-hero.position.z);if(dist<.04)path.shift();else{const speed=Math.min(1,dist/(dt*2.5||1));dx=(p.x-hero.position.x)/dist*speed;dz=(p.z-hero.position.z)/dist*speed;}}
   const before=hero.position.clone(),x=hero.position.x+dx*dt*2.5,z=hero.position.z+dz*dt*2.5;if(canStand(x,hero.position.z))hero.position.x=x;if(canStand(hero.position.x,z))hero.position.z=z;const moved=hero.position.distanceTo(before);if(moved>.0001){hero.rotation.y=Math.atan2(dx,dz);gait+=moved*12;}hero.position.y=.06+(moved>.0001?Math.abs(Math.sin(gait))*.035:0);legs.forEach((p,i)=>p.rotation.x=moved>.0001?Math.sin(gait+i*Math.PI)*.45:0);arms.forEach((p,i)=>p.rotation.x=moved>.0001?-Math.sin(gait+i*Math.PI)*.4:0);if(!path.length){targetRing.visible=false;if(cleaningTarget&&Math.hypot(hero.position.x-cleaningTarget.x,hero.position.z-cleaningTarget.z)<.55){scene.remove(cleaningTarget.mesh);dirtSpots.splice(dirtSpots.indexOf(cleaningTarget),1);cleaningTarget=null;window.dispatchEvent(new CustomEvent('kedaiku:dirt-changed',{detail:{count:dirtSpots.length}}));}}renderer.render(scene,camera);requestAnimationFrame(frame);
  }
  function alignAtCashier(){if(cashierArrival&&!path.length){hero.rotation.y=0;cashierArrival=false;window.dispatchEvent(new CustomEvent('kedaiku:cashier'));}requestAnimationFrame(alignAtCashier);}
@@ -310,10 +400,15 @@ function create(canvas){
   const next=panOffset.clone().add(delta);next.clampLength(0,24);camera.position.add(next.clone().sub(panOffset));panOffset.copy(next);camera.updateMatrixWorld();
  }
  function resetZoom(){camera.position.sub(panOffset);panOffset.set(0,0,0);camera.zoom=1;camera.updateProjectionMatrix();camera.updateMatrixWorld();}
- function nearbyStock(){let best=null,distance=1.65;for(const point of stockPoints){const d=Math.hypot(hero.position.x-point.x,hero.position.z-point.z);if(d<distance){best=point;distance=d;}}return best;}
+ function walkToStation(id){const spot=customerStations.find(item=>item.id===id);if(spot)walkTo(spot.x,spot.z);}
+ function nearbyStock(){let best=null,distance=1.8;for(const point of stockPoints){const d=Math.hypot(hero.position.x-point.x,hero.position.z-point.z);if(d<distance){best=point;distance=d;}}return best;}
  function screenPosition(point){const projected=new THREE.Vector3(point.x,point.y,point.z).project(camera),rect=canvas.getBoundingClientRect();return{x:rect.left+(projected.x+1)*rect.width/2,y:rect.top+(1-projected.y)*rect.height/2};}
  function setStoreOpen(value){storeOpen=value;spawnClock=0;if(!value&&!customers.length)window.dispatchEvent(new CustomEvent('kedaiku:store-empty'));}
- function beginClosing(){storeOpen=false;spawnClock=Infinity;for(const customer of customers){if(customer.state==='entering'||customer.state==='shopping'){customer.awaiting=false;customer.state='checkout';customer.target={x:21.7,z:15.55};}}if(!customers.length)window.dispatchEvent(new CustomEvent('kedaiku:store-empty'));}
+ function beginClosing(){storeOpen=false;spawnClock=Infinity;for(const customer of customers){if(customer.state==='entering'||customer.state==='shopping'){
+  // Customers with something in their basket still pay; empty-handed ones just walk out.
+  customer.awaiting=false;
+  if(customer.basket.length){customer.state='checkout';customer.target={x:21.7,z:15.55};}else{customer.state='leaving';customer.target={x:.55,z:16.05};}
+ }}if(!customers.length)window.dispatchEvent(new CustomEvent('kedaiku:store-empty'));}
  function setTimeOfDay(hour){
   const phases=[
    {hour:8,bg:'#e7f5ff',sky:'#fff4d9',ground:'#a98d78',sun:'#ffe4b0',sunPower:2.25,skyPower:2.2,exposure:1},
@@ -327,6 +422,6 @@ function create(canvas){
   scene.background=blend(from.bg,to.bg);skyLight.color.copy(blend(from.sky,to.sky));skyLight.groundColor.copy(blend(from.ground,to.ground));skyLight.intensity=THREE.MathUtils.lerp(from.skyPower,to.skyPower,mix);sun.color.copy(blend(from.sun,to.sun));sun.intensity=THREE.MathUtils.lerp(from.sunPower,to.sunPower,mix);renderer.toneMappingExposure=THREE.MathUtils.lerp(from.exposure,to.exposure,mix);document.body.style.backgroundColor=`#${scene.background.getHexString()}`;
  }
  function customerStats(){return{active:customers.length,waiting:customers.filter(item=>item.state==='waiting').length,dirt:dirtSpots.length};}
- new ResizeObserver(resize).observe(canvas);resize();setTimeOfDay(8);requestAnimationFrame(frame);return{scene,renderer,click,setStick,zoomBy,resetZoom,panBy,nearbyStock,screenPosition,setStoreOpen,beginClosing,setTimeOfDay,resolveCustomerRequest,serveNextCustomer,customerStats};
+ new ResizeObserver(resize).observe(canvas);resize();setTimeOfDay(8);requestAnimationFrame(frame);return{scene,renderer,click,setStick,zoomBy,resetZoom,panBy,nearbyStock,screenPosition,setStoreOpen,beginClosing,setTimeOfDay,resolveCustomerRequest,serveNextCustomer,customerStats,setStockLevels,walkToStation,setShelfMode};
 }
 window.Shop3D={create};

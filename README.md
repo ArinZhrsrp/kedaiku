@@ -108,6 +108,10 @@ Selepas ubah JavaScript sumber, jalankan `npm run build` semula dan refresh brow
 | `app.js` | Sambungan input klik/tap dan joystick kepada scene, serta mesej ralat. |
 | `index.html` | Struktur halaman, CSS, canvas dan joystick; juga mengandungi bundle yang dijana build. |
 | `build.mjs` | Bundle `scene3d.js` dengan esbuild, kemudian embed engine dan skrip game ke `index.html`. |
+| `music.js` | Muzik latar dan bunyi efek yang dijana dengan Web Audio (tiada fail audio). |
+| `shelf-stock.js` | Buat produk pada rak/chiller hilang satu per satu bila stok berkurang, menggunakan gambar rak kosong. |
+| `shelf-layouts.js` | Kedudukan baris produk pada setiap gambar fixture (dipakai oleh `shelf-stock.js`). |
+| `assets/equipment-hd/empty/` | Gambar versi rak kosong. Lihat `README.md` dalam folder itu untuk syarat gambar. |
 | `missions.js` | Data misi versi lama. Masih disertakan oleh build tetapi **tidak digunakan** oleh gameplay semasa; bukan spesifikasi flow baru. |
 | `package.json` / `package-lock.json` | Dependency dan arahan build. |
 
